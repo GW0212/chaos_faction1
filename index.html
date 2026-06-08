@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <title>카오스팩션1 — Flash Launcher</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <link rel="icon" href="favicon.png" type="image/png" />
+  <link rel="stylesheet" href="styles.css" />
+  <script>
+    window.RufflePlayer = window.RufflePlayer || {};
+    window.RufflePlayer.config = {
+      publicPath: "ruffle/",
+      autoplay: "on",
+      unmuteOverlay: "hidden",
+      backgroundColor: "#000000",
+      letterbox: "on",
+      allowScriptAccess: true,
+      allowNetworking: "all",
+      warnOnUnsupportedContent: false,
+      openUrlMode: "deny",
+      logLevel: "error"
+    };
+  </script>
+  <script src="ruffle/ruffle.js"></script>
+</head>
+<body>
+  <div class="scanlines" aria-hidden="true"></div>
+  <div class="bg-grid" aria-hidden="true"></div>
+  <div class="particles" aria-hidden="true">
+    <span></span><span></span><span></span><span></span>
+    <span></span><span></span><span></span><span></span>
+  </div>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="logo-block">
+        <div class="logo-text">
+          <span class="logo-title">카오스팩션</span>
+          <span class="logo-title accent">1</span>
+        </div>
+      </div>
+      <nav class="controls">
+        <p class="controls-label">CONTROLS</p>
+        <button id="btnReload" class="ctrl-btn"><span class="ctrl-icon">↺</span><span class="ctrl-text">다시 로드</span></button>
+        <button id="btnFullscreen" class="ctrl-btn"><span class="ctrl-icon">⛶</span><span class="ctrl-text">전체화면</span></button>
+        <label class="ctrl-btn file-label" for="fileInput"><span class="ctrl-icon">⊕</span><span class="ctrl-text">SWF 열기</span><input id="fileInput" type="file" accept=".swf" /></label>
+      </nav>
+    </aside>
+
+    <main class="main">
+      <div class="topbar">
+        <div class="topbar-left"><span class="status-dot loading" id="statusDot"></span><span class="status-text" id="statusText">로딩 중...</span></div>
+      </div>
+
+      <div class="stage-wrap" id="stageWrap">
+        <div class="stage-corner tl"></div><div class="stage-corner tr"></div><div class="stage-corner bl"></div><div class="stage-corner br"></div>
+        <div id="stage" class="stage" aria-label="게임 무대" tabindex="0"></div>
+        <div class="drop-overlay" id="dropOverlay" aria-hidden="true"></div>
+      </div>
+
+      <div class="bottombar">
+        <details class="faq-inline" open>
+          <summary>실행 진단</summary>
+          <div class="faq-body" id="diag">확인 중...</div>
+        </details>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const GAME_URL_BASE = "assets/game.swf";
+    const VERSION = "20260607_chaos1_final";
+    const GAME_URL = GAME_URL_BASE + "?v=" + VERSION;
+    const stage = document.getElementById('stage');
+    const fileInput = document.getElementById('fileInput');
+    const btnReload = document.getElementById('btnReload');
+    const btnFullscreen = document.getElementById('btnFullscreen');
+    const statusDot = document.getElementById('statusDot');
+    const statusText = document.getElementById('statusText');
+    const diag = document.getElementById('diag');
+    const dropOverlay = document.getElementById('dropOverlay');
+    const stageWrap = document.getElementById('stageWrap');
+    let objectUrl = null;
+
+    function setStatus(state, msg) {
+      statusDot.className = 'status-dot ' + state;
+      statusText.textContent = msg;
+    }
+    function safe(s) { return String(s).replace(/[&<>\"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch])); }
+
+    async function runDiagnostics() {
+      const lines = [];
+      lines.push('index 버전: ' + VERSION);
+      lines.push('현재 주소: ' + location.href);
+      try {
+        const r = await fetch(GAME_URL, { cache: 'no-store' });
+        lines.push('assets/game.swf: HTTP ' + r.status + ' ' + r.statusText);
+        const buf = await r.clone().arrayBuffer();
+        const head = Array.from(new Uint8Array(buf.slice(0, 3))).map(v => String.fromCharCode(v)).join('');
+        lines.push('SWF 헤더: ' + head + ' / 크기: ' + buf.byteLength + ' bytes');
+      } catch (e) {
+        lines.push('assets/game.swf 확인 실패: ' + e.message);
+      }
+      lines.push('Ruffle: ' + (window.RufflePlayer ? '로드됨' : '로드 안 됨'));
+      diag.innerHTML = lines.map(line => '<p><code>' + safe(line) + '</code></p>').join('');
+    }
+
+    function mountObject(src) {
+      stage.innerHTML = '';
+      const obj = document.createElement('object');
+      obj.setAttribute('id', 'flashObject');
+      obj.setAttribute('type', 'application/x-shockwave-flash');
+      obj.setAttribute('data', src);
+      obj.setAttribute('width', '100%');
+      obj.setAttribute('height', '100%');
+      obj.style.width = '100%';
+      obj.style.height = '100%';
+      obj.style.display = 'block';
+      obj.innerHTML = '<param name="movie" value="' + safe(src) + '"><param name="allowScriptAccess" value="always"><param name="allowNetworking" value="all"><param name="wmode" value="direct">';
+      stage.appendChild(obj);
+      setStatus('ok', '실행 중');
+      setTimeout(runDiagnostics, 500);
+    }
+
+    function loadDefault() {
+      if (objectUrl) { URL.revokeObjectURL(objectUrl); objectUrl = null; }
+      mountObject(GAME_URL);
+    }
+
+    fileInput.addEventListener('change', e => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      objectUrl = URL.createObjectURL(file);
+      mountObject(objectUrl);
+    });
+    btnReload.addEventListener('click', loadDefault);
+    btnFullscreen.addEventListener('click', () => {
+      const player = stage.querySelector('ruffle-player, object');
+      if (player && typeof player.enterFullscreen === 'function') player.enterFullscreen();
+      else if (player && player.requestFullscreen) player.requestFullscreen();
+      else stage.requestFullscreen && stage.requestFullscreen();
+    });
+    stageWrap.addEventListener('dragover', e => { e.preventDefault(); dropOverlay.classList.add('visible'); });
+    stageWrap.addEventListener('dragleave', e => { if (!stageWrap.contains(e.relatedTarget)) dropOverlay.classList.remove('visible'); });
+    stageWrap.addEventListener('drop', e => {
+      e.preventDefault(); dropOverlay.classList.remove('visible');
+      const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (file && file.name.toLowerCase().endsWith('.swf')) { objectUrl = URL.createObjectURL(file); mountObject(objectUrl); }
+    });
+    stage.addEventListener('click', () => stage.focus());
+    document.addEventListener('DOMContentLoaded', loadDefault);
+  </script>
+</body>
+</html>
